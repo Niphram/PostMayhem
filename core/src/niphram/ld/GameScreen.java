@@ -442,7 +442,7 @@ public class GameScreen implements Screen, InputProcessor, ContactListener {
                     if (m_HitBody.equals(a)) return false;
     
                     Vector2 anchorB = m_HitBody.getLocalPoint(new Vector2(m_TestPoint.x, m_TestPoint.y));
-                    float len = Math.max(0.05f, Math.abs(m_HitAnchor.cpy().sub(anchorB).len()));
+                    float len = Math.max(0.5f, Math.abs(a.getWorldPoint(m_HitAnchor).cpy().sub(m_HitBody.getWorldPoint(anchorB)).len()));
                     
                     if (len < m_TapeAmount) {
                         m_Tapes.add(new Tape(a, m_HitBody, m_HitAnchor, anchorB, m_World));
