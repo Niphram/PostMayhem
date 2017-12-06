@@ -21,7 +21,6 @@ import com.badlogic.gdx.utils.Array;
 import niphram.ld.entities.Package;
 import niphram.ld.entities.Tape;
 
-import java.util.ArrayList;
 import java.util.Iterator;
 
 /**
@@ -36,8 +35,8 @@ public class GameScreen implements Screen, InputProcessor, ContactListener {
     private OrthographicCamera m_GuiCam;
     
     /* Objects */
-    private ArrayList<Package> m_Packages = new ArrayList<Package>();
-    private ArrayList<Tape> m_Tapes = new ArrayList<Tape>();
+    private Array<Package> m_Packages = new Array<Package>();
+    private Array<Tape> m_Tapes = new Array<Tape>();
     
     /* Box2D */
     private World m_World;
@@ -55,7 +54,7 @@ public class GameScreen implements Screen, InputProcessor, ContactListener {
     /* Game variables */
     private float m_PackageTimer = 1f;
     private float m_PaletteTimer = 60f;
-    private int m_PaletteState = 0;
+    private int m_PaletteState = 3;
     private float m_Difficulty = 1f;
     private float m_TapeAmount = 5f;
     
@@ -191,6 +190,32 @@ public class GameScreen implements Screen, InputProcessor, ContactListener {
         return null;
     }
     
+    private Tape getListByJoint(Joint j) {
+        for (Tape t : m_Tapes) {
+            if (t.getJoint().equals(j)) {
+                return t;
+            }
+        }
+        return null;
+    }
+    
+    private void removePackageAndTape(Package p) {
+        Body b = p.getBody();
+        
+        for (Iterator<JointEdge> edges = b.getJointList().iterator(); edges.hasNext(); ) {
+            
+            JointEdge je = edges.next();
+            
+            Tape t = getListByJoint(je.joint);
+            
+            if (t == null) continue;
+            
+            m_Tapes.removeValue(t, false);
+        }
+        
+        m_Packages.removeValue(p, false);
+    }
+    
     // Really bad
     private void movePalette() {
         switch (m_PaletteState) {
@@ -214,31 +239,20 @@ public class GameScreen implements Screen, InputProcessor, ContactListener {
                     m_PaletteBody.setLinearVelocity(0, 1);
                     m_PaletteBody.setTransform(-2, -3, 0);
     
-                    ArrayList<Package> packages = new ArrayList<Package>();
-    
-                    for (JointEdge je : m_PaletteBody.getJointList()) {
-                        packages.add(getPackageByBody(je.other));
-                    }
-    
-                    for (Iterator<Package> pack = packages.iterator(); pack.hasNext(); ) {
-                        Package p = pack.next();
-                        Body b = p.getBody();
-        
-                        Array<JointEdge> jointEdges = b.getJointList();
-                        for (Iterator<Tape> tape = m_Tapes.iterator(); tape.hasNext() && jointEdges.size > 0; ) {
-                            Tape t = tape.next();
-            
-                            if (t.getJoint().equals(jointEdges.get(0).joint)) {
-                                tape.remove();
-                                m_World.destroyJoint(jointEdges.get(0).joint);
-                            }
-                        }
-        
+                    Array<JointEdge> edges = m_PaletteBody.getJointList();
+                    
+                    for (Iterator<JointEdge> edge = edges.iterator(); edge.hasNext(); ) {
+                        JointEdge je = edge.next();
+                        edge.remove();
+                        Body b = je.other;
+                        
                         m_Score += b.getMass() * 5;
+                        
+                        Package p = getPackageByBody(b);
+                        removePackageAndTape(p);
                         m_World.destroyBody(b);
-                        m_Packages.remove(p);
-                        pack.remove();
                     }
+    
                     m_TapeAmount = 5;
                     m_TapeProgress.setProgress(m_TapeAmount / 5f);
                 }
@@ -247,10 +261,11 @@ public class GameScreen implements Screen, InputProcessor, ContactListener {
                 if (m_PaletteBody.getPosition().y > -2.5f) {
                     m_PaletteBody.setLinearVelocity(0, 0);
                     m_PaletteBody.setTransform(-2, -2.5f, 0);
-                    m_PaletteTimer = 60;
-                    m_PaletteState = 0;
+                    m_PaletteState = 3;
                     m_Difficulty *= 0.8f;
                 }
+                break;
+            default:
                 break;
         }
     }
@@ -274,9 +289,12 @@ public class GameScreen implements Screen, InputProcessor, ContactListener {
             m_PackageTimer = MathUtils.random(5, 10) * m_Difficulty;
             spawnPackage();
         }
+    
+        movePalette();
         
         if (m_PaletteTimer < 0) {
-            movePalette();
+            m_PaletteState = 0;
+            m_PaletteTimer += 60f;
         }
         
         /* Drawing */
@@ -304,34 +322,34 @@ public class GameScreen implements Screen, InputProcessor, ContactListener {
         double s = (double) Math.round(((double) m_Score * 100)) / 100;
         
         m_Font.draw(batch, s + "$", 50, 50);
+        
         batch.end();
         
         /* Update Bodies */
         for (Iterator<Package> pack = m_Packages.iterator(); pack.hasNext(); ) {
             Package p = pack.next();
             Body b = p.getBody();
-        
+            
             if (b.getPosition().x > 3.5) {
                 b.setLinearVelocity(-0.5f, b.getLinearVelocity().y);
             }
             if (b.getPosition().y < -3) {
-                Array<JointEdge> jointEdges = b.getJointList();
-                for (Iterator<Tape> tape = m_Tapes.iterator(); tape.hasNext() && jointEdges.size > 0; ) {
-                    Tape t = tape.next();
-                
-                    if (t.getJoint().equals(jointEdges.get(0).joint)) {
-                        tape.remove();
-                        m_World.destroyJoint(jointEdges.get(0).joint);
-                    } else if (t.getJoint().equals(m_MouseJoint)) {
-                        m_World.destroyJoint(m_MouseJoint);
-                        m_MouseJoint = null;
-                    }
+                for (Iterator<JointEdge> edges = b.getJointList().iterator(); edges.hasNext(); ) {
+        
+                    JointEdge je = edges.next();
+        
+                    Tape t = getListByJoint(je.joint);
+        
+                    if (t == null) continue;
+        
+                    m_Tapes.removeValue(t, false);
                 }
-            
-                m_Score -= b.getMass() * 20;
+    
+                m_Score -= b.getMass() * 20f;
                 SoundManager.p_BoxDestroy.play(1.0f);
-                m_World.destroyBody(b);
+                
                 pack.remove();
+                m_World.destroyBody(b);
             }
         }
         
